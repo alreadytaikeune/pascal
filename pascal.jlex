@@ -1,0 +1,61 @@
+import java_cup.runtime.Symbol;
+%%
+%class Lexer
+%line
+%column
+%cup
+%standalone
+%state COMMENT
+
+
+ICNST = [0-9]+
+
+%%
+<YYINITIAL>{
+"print"		{ return new Symbol(sym.TK_PRINT);}
+"while" {return new Symbol(sym.TK_WHILE); }
+"else" { return new Symbol(sym.TK_ELSE); }
+"true" { return new Symbol(sym.TK_TRUE); }
+"false" { return new Symbol(sym.TK_FALSE); }
+"def" { return new Symbol(sym.TK_DEF); }
+"return" { return new Symbol(sym.TK_RETURN); }
+"_" { return new Symbol(sym.TK_GLOBAL); }
+";"		{ return new Symbol(sym.TK_SEP);}
+"+"	{ return new Symbol(sym.TK_PLUS); }
+"-"	{ return new Symbol(sym.TK_MINUS); }
+"(" { return new Symbol(sym.TK_LP); }
+")" { return new Symbol(sym.TK_RP); }
+"*"	{ return new Symbol(sym.TK_TIMES); }
+"/"	{ return new Symbol(sym.TK_DIVIDE); }
+"if"	{ return new Symbol(sym.TK_IF); }
+"{" { return new Symbol(sym.TK_OB); }
+"}" { return new Symbol(sym.TK_CB); }
+"<" { return new Symbol(sym.TK_L); }
+">" { return new Symbol(sym.TK_G); }
+"==" { return new Symbol(sym.TK_EQ); }
+"<=" { return new Symbol(sym.TK_LEQ); }
+">=" { return new Symbol(sym.TK_GEQ); }
+"%" { return new Symbol(sym.TK_MOD); }
+"/*" { yybegin(COMMENT); }
+"&" { return new Symbol(sym.TK_AND); }
+"|" { return new Symbol(sym.TK_OR); }
+"," { return new Symbol(sym.TK_COMA); }
+\/\/.* {  }
+"=" { return new Symbol(sym.TK_EQUAL);}
+\[ { return new Symbol(sym.TK_ARRO); }
+\] { return new Symbol(sym.TK_ARRC); }
+[a-zA-Z]+ { return new Symbol(sym.TK_VAR, yytext()); }
+"/*" { yybegin(COMMENT); }
+"<<" { return new Symbol(sym.TK_IN); }
+{ICNST}		{ return new Symbol(sym.TK_ICNST, new Integer(yytext())); }
+[\ \t\n\r\f]	{ }
+.		{ System.err.println("unexpected char '" + yytext() +
+				     "' line " + yyline);
+                  return new Symbol(sym.error); }
+}
+
+<COMMENT>{
+"*/" { yybegin(YYINITIAL); }
+(\n|\r|\r\n|;)	{ }
+. {}
+}

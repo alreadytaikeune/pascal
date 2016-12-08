@@ -1,0 +1,294 @@
+import java_cup.runtime.*;
+import java.util.*;
+import java.lang.IllegalStateException;
+
+parser code {:
+  public static void main(String args[]) throws Exception {
+    new Parser(new Lexer(System.in)).parse();
+  }
+:}
+
+action code {:
+  // attributes & methods seen from actions
+  HashMap<String, String> variables = new HashMap<String, String>();
+  String suffix;
+  int count=0;
+  String make_inst(String lab, String op, String arg) {
+    return lab + "\t" + op + "\t" + arg + "\n";
+  }
+
+  String make_comm(String comment) {
+    return ";/ " + comment + "\n";
+  }
+  
+  String build_if(String action, String instruc){
+	if(action == null){
+		return "";
+	}
+	count++;
+	String out = "";
+	out+=make_predicate_test(action);
+	out += make_inst("", "BEZ", "finif"+count);
+	out += instruc;
+	out += make_inst("finif"+count, "EQU", "*");
+	return out;
+  }
+  
+  String build_ifelse(String action, String instrucIf, String instrucElse){
+	if(action == null){
+		return "";
+	}
+	String out = "";
+	count++;
+	out+= make_predicate_test(action);
+	out += make_inst("", "BEZ", "else"+count);
+	out += instrucIf;
+	out += make_inst("", "PUSH", "finif"+count);
+	out += make_inst("", "GOTO", "");
+	out += make_inst("else"+count, "EQU", "*");
+	out += instrucElse;
+	out += make_inst("finif" + count, "EQU", "*");
+	return out;
+  }
+  
+  
+  String make_predicate_test(String action){
+	String out = "";
+	if(action.equals("true")){
+		return make_inst("", "PUSH", "1");
+	}
+	else if(action.equals("false")){
+		return make_inst("", "PUSH", "0");
+	}
+	out += make_inst("", action, "true"+count);
+	out += make_inst("", "PUSH", "0");
+	out += make_inst("", "PUSH", "end"+count);
+	out += make_inst("", "GOTO", "");
+	out += make_inst("true"+count, "EQU", "*");
+	out += make_inst("", "PUSH", "1");
+	out += make_inst("end"+count, "EQU", "*");
+	return out;
+  }
+  
+  
+  String build_while(String p, String action, String action2, String ins){
+    String lblstart = "start" + count;
+	String out = make_inst(lblstart, "EQU", "*");
+	out += (p + build_ifelse(action, make_inst("", "PUSH", "1"), make_inst("", "PUSH", "0"))); // build_if increments cout, hence count++ has to be put after
+	if(action2 != null){
+		out += (p + build_if(action2, make_inst("", "PUSH", "1")));
+	}
+	count++;
+	out += make_inst("", "BEZ", "lblfin"+count);
+	out += ins;
+	out += make_inst("", "PUSH", lblstart);
+	out += make_inst("", "GOTO", "");
+	out += make_inst("lblfin" + count, "EQU", "*");
+	return out;
+  }
+  
+  
+  
+  String assignVariable(String s, String e){
+	if(variables.containsKey(s)){
+		return make_inst("", "PUSH",s) + e + make_inst("", "STORE", "");
+	}
+	else{
+		variables.put(s, e);
+		return make_inst(s,"DS", "1")+make_inst("", "PUSH",s) + e + make_inst("", "STORE", "");
+	}  
+  }
+  
+  String assignArray(String s, Integer i){
+	if(variables.containsKey(s)){
+		throw new IllegalStateException("Don't overwrite arrays");
+	}
+	else{
+		variables.put(s, i+"");
+		StringBuffer out = new StringBuffer(make_inst(s,"DS", i+""));
+		for(int k = 0; k < i; k++){
+			out.append(make_inst("", "PUSH",s));
+			out.append(make_inst("", "PUSH", k+""));
+			out.append("\tADD\t\n");
+			out.append(make_inst("", "PUSH", "0"));
+			out.append(make_inst("", "STORE", ""));
+		}
+		return out.toString();
+	}  
+  }
+  
+  String access_array(String s, Integer i){
+	String out = make_inst("", "PUSH", s);
+	out += make_inst("", "PUSH", i+"");
+	out += make_inst("", "ADD", "");
+	out += make_inst("", "LOAD", "");
+	return out;
+  
+  }
+  
+  String assign_value_array(String s, Integer i, String e){
+	String out = make_inst("", "PUSH", s);
+	out += make_inst("", "PUSH", i+"");
+	out += make_inst("", "ADD", "");
+	out += e;
+	out += make_inst("", "STORE", "");
+	return out;
+  }
+  
+  
+  String define_function(String name, String l, String args){
+	String out = "";
+	count++;
+	variables.put(name, l);
+	String jumper = "jump"+ count;
+	out += make_inst("", "PUSH", jumper);
+	out += make_inst("", "GOTO", "");
+	out += make_inst(name, "EQU", "*");
+	out += args;
+	out += l;
+	out += make_inst("", "GOTO", "");
+	out += make_inst(jumper, "EQU", "*");
+	suffix = "";
+	return out;
+  }
+  
+  String call_function(String name, String args){
+	count++;
+	String returnlbl = "ret" + name + count;
+	String out = make_inst("", "PUSH", returnlbl);
+	out += args;
+	out += make_inst("", "PUSH", name);
+	out += make_inst("", "GOTO", "");
+	out += make_inst(returnlbl, "EQU", "*");
+	return out;
+  }
+  
+:}
+
+terminal TK_SEP, TK_PRINT, TK_PLUS, TK_MINUS, TK_LP, TK_RP, TK_DIVIDE, TK_TIMES, TK_EQUAL, TK_IN, TK_LEQ, TK_GEQ, TK_L, TK_G, 
+TK_EQ, TK_OB, TK_CB, TK_IF, TK_MOD, TK_WHILE, TK_ELSE, TK_ARRO, TK_ARRC, TK_TRUE, TK_FALSE, TK_AND, TK_OR,TK_DEF, TK_RETURN, 
+TK_COMA, TK_GLOBAL;
+terminal Integer TK_ICNST;
+terminal String TK_VAR;
+
+non terminal target;
+non terminal String program, linst, inst, print, expr;
+non terminal String[] predicate;
+non terminal String arguments, argument, arguments_def;
+non terminal String fname;
+
+precedence right TK_EQUAL;
+precedence left TK_RETURN;
+precedence left TK_VAR;
+precedence left TK_PLUS, TK_MINUS;
+precedence left TK_TIMES, TK_DIVIDE;
+precedence left TK_MOD;
+precedence left TK_LP, TK_RP;
+precedence left TK_OR, TK_AND;
+
+
+start with target;
+
+target ::= program:s {: System.out.println(s); :}
+  ;
+
+program ::= linst:l {: RESULT = l + "\tSTOP\n"; :}
+  ;
+linst ::= inst:i {: RESULT = i; :}
+  | linst:l inst:i {: RESULT = l + i; :}
+  ;
+  
+inst  ::= print:i TK_SEP {: RESULT = i; :}
+	| TK_VAR:s TK_EQUAL expr:e {: RESULT =  assignVariable(s+suffix, e); :}
+	| TK_GLOBAL TK_VAR:s TK_EQUAL expr:e {: RESULT =  assignVariable(s, e); :}
+	| TK_VAR:s TK_EQUAL TK_ARRO TK_ICNST:i TK_ARRC {: RESULT = assignArray(s+suffix, i); :}
+	| TK_GLOBAL TK_VAR:s TK_EQUAL TK_ARRO TK_ICNST:i TK_ARRC {: RESULT = assignArray(s, i); :}
+	| TK_VAR:s TK_ARRO TK_ICNST:i TK_ARRC TK_EQUAL expr:e {: RESULT = assign_value_array(s+suffix, i, e); :}
+	| TK_GLOBAL TK_VAR:s TK_ARRO TK_ICNST:i TK_ARRC TK_EQUAL expr:e {: RESULT = assign_value_array(s, i, e); :}
+	| TK_SEP {: RESULT = ""; :}
+	| TK_VAR:s TK_IN {: RESULT = make_inst(s+suffix, "DS", "1") + make_inst("", "PUSH", s+suffix) + make_inst("", "IN", "") + make_inst("", "STORE", ""); :}
+	| TK_IF predicate:p TK_OB linst:i TK_CB {: RESULT = p[0] + build_ifelse(p[1], i, "") + p[0]+ build_ifelse(p[2], i, ""); :}
+	| TK_IF predicate:p TK_OB linst:i1 TK_CB TK_ELSE TK_OB linst:i2 TK_CB {:
+		RESULT = p[0] + build_ifelse(p[1], i1, i2) + p[0]+ build_ifelse(p[2], i1, i2);
+	:}
+	| TK_IF predicate:p TK_OB  TK_CB TK_ELSE TK_OB  TK_CB {: RESULT = ""; :}
+	| TK_IF predicate:p TK_OB  TK_CB TK_ELSE TK_OB linst:i1 TK_CB {: 
+			RESULT = p[0] + build_ifelse(p[1], "", i1) + p[0]+ build_ifelse(p[2], "", i1); :}
+	| TK_IF predicate:p TK_OB linst:i1 TK_CB TK_ELSE TK_OB  TK_CB {: 
+		RESULT = p[0] + build_ifelse(p[1], i1, "") + p[0]+ build_ifelse(p[2], i1, ""); :}
+	| TK_WHILE predicate:p TK_OB linst:i TK_CB {: RESULT = build_while(p[0], p[1], p[2], i); :}
+	| TK_DEF fname:s TK_LP TK_RP TK_OB linst:l TK_CB {: RESULT = define_function(s, l, ""); :}
+	| TK_DEF fname:s TK_LP arguments_def:a TK_RP TK_OB linst:l TK_CB {:  RESULT = define_function(s, l, a); :}
+	| TK_VAR:s TK_LP TK_RP {: RESULT = call_function(s, ""); :}
+	| TK_VAR:s TK_LP arguments:a TK_RP {: RESULT = call_function(s, a); :}
+	| TK_RETURN {: RESULT = make_inst("", "GOTO", ""); :}
+	| TK_RETURN expr:e {: RESULT = e + make_inst("", "SWAP", "") + make_inst("", "GOTO", ""); :}
+	;
+
+
+fname ::= 
+	TK_VAR:f {: suffix = "_" +f; RESULT = f; :}
+;
+
+arguments ::= 
+	expr:a {: RESULT = a; :}
+	|expr:a TK_COMA arguments:as {: RESULT = a+as; :}
+	
+;
+
+
+arguments_def ::= 
+	TK_VAR:a {: RESULT = make_inst(a+suffix, "DS", "1") + make_inst("", "PUSH", a+suffix) + 
+								make_inst("", "SWAP", "") + make_inst("", "STORE", ""); :}
+	| TK_VAR:a TK_COMA arguments_def:as {: RESULT = as + make_inst(a+suffix, "DS", "1") + make_inst("", "PUSH", a+suffix) + 
+								make_inst("", "SWAP", "") + make_inst("", "STORE", ""); :}
+;
+
+
+
+print ::= TK_PRINT expr:e
+    {:
+	    String comment = make_comm("print...");
+	    RESULT = comment + e + "\tOUT\n";
+	:}
+	;
+	
+
+predicate ::= 
+	expr:e1 TK_L expr:e2 {: String[] out = new String[3]; out[1] = "BGZ"; out[0] = e2 + e1+ "\tSUB\t\n";
+												RESULT = out; :}
+	| expr:e1 TK_LEQ expr:e2 {: String[] out = new String[3]; out[2] = "BEZ"; out[1] = "BGZ"; out[0] = e2 + e1+ "\tSUB\t\n";
+												RESULT = out; :}
+	| expr:e1 TK_G expr:e2 {: String[] out = new String[3]; out[1] = "BGZ"; out[0] = e1 + e2 + "\tSUB\t\n"; RESULT = out; :}
+	| expr:e1 TK_GEQ expr:e2 {: String[] out = new String[3]; out[2] = "BEZ"; out[1] = "BGZ"; out[0] = e1 + e2 + "\tSUB\t\n";
+												RESULT = out; :}
+	| expr:e1 TK_EQ expr:e2 {: String[] out = new String[3]; out[1] = "BEZ"; out[0] = e1 + e2 + "\tSUB\t\n"; RESULT = out; :}
+	| TK_LP predicate:p TK_RP {: RESULT = p; :}
+	| TK_TRUE {: String[] out = new String[3]; out[1] = "true"; out[0] = ""; RESULT = out; :}
+	| TK_FALSE {: String[] out = new String[3]; out[1] = "false"; out[0] = ""; RESULT = out; :}
+	| TK_TRUE TK_OR predicate:p {: String[] out = new String[3]; out[1] = "true"; out[0] = ""; RESULT = out; :}
+	| TK_TRUE TK_AND predicate:p {: RESULT = p; :}
+	| TK_FALSE TK_AND predicate:p {: String[] out = new String[3]; out[1] = "false"; out[0] = ""; RESULT = out; :}
+	| TK_FALSE TK_OR predicate:p {: RESULT = p; :}
+	
+;
+
+
+
+expr ::= TK_ICNST:i {: RESULT = "\tPUSH\t" + i + "\n"; :}
+	| expr:e1 TK_PLUS expr:e2 {: RESULT = e1 + e2 + "\tADD\t\n"; :}
+	| expr:e1 TK_MINUS expr:e2 {: RESULT = e1 + e2 + "\tSUB\t\n"; :}
+	| TK_LP expr:e TK_RP {: RESULT = e; :}
+	| expr:e1 TK_TIMES expr:e2 {: RESULT = e1 + e2 + "\tMUL\t\n"; :}
+	| expr:e1 TK_DIVIDE expr:e2 {: RESULT = e1 + e2 + "\tDIV\t\n"; :}
+	| expr:e1 TK_MOD expr:e2 {: RESULT = e1 + e1 + e2 + "\tDIV\t\n" + e2 + "\tMUL\t\n"  + "\tSUB\t\n"; :}
+	| TK_VAR:s {: RESULT = "\tPUSH\t" + s + suffix + "\n\tLOAD\t\n"; :}
+	| TK_VAR:s TK_ARRO TK_ICNST:i TK_ARRC {: RESULT = access_array(s+suffix, i); :}
+	| TK_VAR:s TK_LP TK_RP {: RESULT = call_function(s, ""); :}
+	| TK_VAR:s TK_LP arguments:a TK_RP {: RESULT = call_function(s, a); :}
+
+	;
+	
+	
+	
+
